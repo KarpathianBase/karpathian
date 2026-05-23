@@ -1,0 +1,37 @@
+# Karpathian Phase 0 — restricted files contract
+#
+# A miner-submitted patch that touches any path matching the patterns below is
+# rejected by the validator's diff scanner before any compute is spent.
+#
+# These are the files that, if a miner could modify, would let them tamper
+# with evaluation, scoring, or the calibration benchmark — the protocol's
+# integrity primitives. In Phase 0.5+ this list is also enforced inside the
+# proof-test Docker (the canonical-training entry point refuses to start if
+# the post-patch tree differs from the canonical recipe on these paths).
+
+restricted_paths:
+  # Evaluation harness — owns val_bpb, benchmark mix, scoring formula.
+  - "eval/**"
+
+  # Calibration benchmark — its timings are the hardware-independence anchor.
+  - "calibration/**"
+
+  # Validator client itself — not part of the recipe, but listed defensively
+  # in case a miner's patch tries to include it.
+  - "validator/**"
+
+  # Proof-test runner — same reasoning.
+  - "proof/**"
+
+  # Restricted-files contract itself.
+  - "restricted_files.yaml"
+  - "data_manifest.json"
+
+# What miners CAN patch (positive list, advisory — the diff scanner uses the
+# negative list above as the authoritative gate):
+#
+#   model/        — architecture, normalization, activation, attention variants
+#   recipe/       — training loop, optimizer config, LR schedule, gradient clip
+#   data/         — tokenizer, sampling, filtering, mixture (but NOT the
+#                   manifest hash — that's locked per submission round)
+#   configs/      — hyperparameter values

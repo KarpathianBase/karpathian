@@ -1,0 +1,98 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# --- Virtualenvs ---
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# --- Caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Karpathian: generated artifacts (never commit) ---
+
+# Local "chain" state — Phase 0 stub for on-chain ledger. Per-environment.
+chain/
+
+# Run outputs: training logs, checkpoints, calibration results, proof bundles.
+runs/
+
+# Test submission staging dirs.
+submissions/
+
+# Generated tokenized shards and their content-addressed manifest.
+# Phase 0.5+ ships a canonical data_manifest.json that's committed; until
+# then it's local to whoever runs data.prepare.
+data/shards/
+data/data_manifest.json
+data_manifest.json
+
+# Hidden-eval private data — never committed in any phase. Validators hold
+# their pool off-network. This directory exists locally for testing.
+eval/private/
+
+# Miner private keys (Phase 0 Ed25519 keypairs). NEVER commit. Phase 0.5+
+# uses Bittensor coldkey/hotkey via the substrate SDK — also never committed.
+miner/keys/
+
+# Model checkpoints (also covered by runs/ but listed defensively).
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# Local logs.
+*.log
+
+# --- Secrets and config ---
+.env
+.env.*
+!.env.example
+secrets.yaml
+*.pem
+*.key
+
+# --- Docker / build artifacts (Phase 0.5+) ---
+.docker-build/
+*.tar.gz
+
+# --- Misc ---
+.notes/
+TODO.local.md
