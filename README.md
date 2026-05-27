@@ -20,7 +20,7 @@ The subnet and its token fund the production of these artifacts. They are not th
 |---|---|---|
 | **0 — MVP** | ✅ Complete | End-to-end protocol on CPU: model, training, eval, proof-test, validator, scoring, king-change cycle |
 | **0.5 — H100** | ✅ Complete ([`v0.5.0`](https://github.com/KarpathianBase/karpathian/releases/tag/v0.5.0) · [results](https://github.com/orgs/KarpathianBase/discussions/4)) | Real data (1B tokens FineWeb-Edu), noise floor measured (2σ = 0.013 val_bpb), Karpathian-1 trained (254M params, loss 3.82) |
-| **0.5b — Optimization** | 🔜 Next | bf16 mixed precision (~2× throughput), wandb live monitoring |
+| **0.5b — Optimization** | ✅ Complete ([`v0.5.1`](https://github.com/KarpathianBase/karpathian/releases/tag/v0.5.1)) | bf16: 3.8× throughput (63K tok/s), same loss. wandb live monitoring, Streamlit dashboard, wandb metrics export in proof bundles |
 | **0.5c — Attestation** | Planned | Real TDX + nvtrust on CC-capable H100 |
 | **0.5d — Testnet** | Planned | Bittensor testnet integration |
 | **1.0 — Launch** | Planned | Register subnet, open to external miners, first bounty pilot |
@@ -127,7 +127,8 @@ the unverified tier is expected to be deprecated.
 |---|---|
 | H100 calibration (matmul) | 0.512 ms |
 | Noise floor (10 seeds, 125M model) | σ = 0.006 val_bpb, margin (2σ) = 0.013 |
-| Karpathian-1 (254M params, 262M tokens) | Final loss = 3.82 |
+| Karpathian-1 fp32 (254M params, 262M tokens) | Final loss = 3.82, 16.9K tok/s, 259 min |
+| Karpathian-1 bf16 (same model, same data) | Final loss = 3.82, **63.4K tok/s, 69 min (3.8× faster)** |
 
 Full results: [Phase 0.5 Discussion](https://github.com/orgs/KarpathianBase/discussions/4) ·
 Release: [`v0.5.0`](https://github.com/KarpathianBase/karpathian/releases/tag/v0.5.0)
