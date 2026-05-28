@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import time
 from pathlib import Path
@@ -57,6 +58,10 @@ class BittensorChain(ChainInterface):
         self.bt = bt
 
         self.wallet = bt.Wallet(name=wallet_name, hotkey=wallet_hotkey)
+        password = os.environ.get("BT_WALLET_PASSWORD")
+        if password and self.wallet.coldkey_file.is_encrypted():
+            self.wallet.coldkey_file.decrypt(password)
+            print(f"[chain] coldkey decrypted")
         self.subtensor = bt.Subtensor(network=network)
         self.metagraph = self.subtensor.metagraph(netuid=netuid)
 
@@ -146,7 +151,10 @@ class BittensorChain(ChainInterface):
         """Validator sets weights on-chain for miners.
 
         hotkey_scores is {miner_hotkey: score}. Scores are normalized to
-        [0, 1] and mapped to UIDs before calling subtensor.set_weights().
+        [0, 1] and mapped to UIDs before submitting.
+
+        Automatically uses commit-reveal if enabled on the subnet,
+        otherwise falls back to direct set_weights.
         """
         self.sync()
 
@@ -162,34 +170,78 @@ class BittensorChain(ChainInterface):
             print("[chain] no valid UIDs to set weights for")
             return False
 
-        # Normalize weights to sum to 1.
         total = sum(weights) or 1.0
         weights = [w / total for w in weights]
 
         uid_tensor = torch.tensor(uids, dtype=torch.int64)
         weight_tensor = torch.tensor(weights, dtype=torch.float32)
 
+        cr_enabled = self.subtensor.commit_reveal_enabled(netuid=self.netuid)
+
         try:
-            success, msg = self.subtensor.set_weights(
-                wallet=self.wallet,
-                netuid=self.netuid,
-                uids=uid_tensor,
-                weights=weight_tensor,
-                wait_for_inclusion=True,
-                wait_for_finalization=False,
-            )
-            print(f"[chain] set_weights: success={success} msg={msg}")
+            # Check rate limit before attempting
+            rl = self.subtensor.weights_rate_limit(netuid=self.netuid)
+            my_uid = self.get_uid(self.wallet.hotkey.ss58_address)
+            if my_uid is not None:
+                last_update = self.metagraph.neurons[my_uid].last_update
+                blocks_since = self.subtensor.get_current_block() - last_update
+                if blocks_since <= rl:
+                    wait_blocks = rl - blocks_since + 1
+                    wait_secs = wait_blocks * 12
+                    print(f"[chain] rate limited ({blocks_since}/{rl} blocks). waiting ~{wait_secs}s...")
+                    import time as _time
+                    _time.sleep(wait_secs)
+
+            if cr_enabled:
+                result = self.subtensor.commit_weights(
+                    wallet=self.wallet,
+                    netuid=self.netuid,
+                    uids=uid_tensor,
+                    weights=weight_tensor,
+                    wait_for_inclusion=True,
+                    wait_for_finalization=False,
+                )
+                success = result.success if hasattr(result, "success") else bool(result)
+                print(f"[chain] commit_weights: success={success} (reveal needed after tempo)")
+            else:
+                result = self.subtensor.set_weights(
+                    wallet=self.wallet,
+                    netuid=self.netuid,
+                    uids=uid_tensor,
+                    weights=weight_tensor,
+                    wait_for_inclusion=True,
+                    wait_for_finalization=False,
+                )
+                success = result.success if hasattr(result, "success") else bool(result)
+                print(f"[chain] set_weights: success={success}")
+
             self.append_event({
-                "type": "weights_set",
+                "type": "weights_committed" if cr_enabled else "weights_set",
                 "timestamp": time.time(),
                 "uids": uids,
                 "weights": weights,
                 "success": success,
+                "commit_reveal": cr_enabled,
                 "block": self._current_block(),
             })
             return success
         except Exception as e:
-            print(f"[chain] set_weights failed: {e}")
+            print(f"[chain] weight setting failed: {e}")
+            return False
+
+    def reveal_weights(self) -> bool:
+        """Reveal previously committed weights (call after tempo passes)."""
+        try:
+            result = self.subtensor.reveal_weights(
+                wallet=self.wallet,
+                netuid=self.netuid,
+                wait_for_inclusion=True,
+            )
+            success = result.success if hasattr(result, "success") else bool(result)
+            print(f"[chain] reveal_weights: success={success}")
+            return success
+        except Exception as e:
+            print(f"[chain] reveal_weights failed: {e}")
             return False
 
     def get_king(self) -> Optional[KingRecord]:

@@ -22,7 +22,7 @@ The subnet and its token fund the production of these artifacts. They are not th
 | **0.5 — H100** | ✅ Complete ([`v0.5.0`](https://github.com/AutoRalphBase/autoralph/releases/tag/v0.5.0) · [results](https://github.com/orgs/AutoRalphBase/discussions/4)) | Real data (1B tokens FineWeb-Edu), noise floor measured (2σ = 0.013 val_bpb), AutoRalph-1 trained (254M params, loss 3.82) |
 | **0.5b — Optimization** | ✅ Complete ([`v0.5.1`](https://github.com/AutoRalphBase/autoralph/releases/tag/v0.5.1)) | bf16: 3.8× throughput (63K tok/s), same loss. wandb live monitoring, Streamlit dashboard, wandb metrics export in proof bundles |
 | **0.5c — Attestation** | ✅ Code-complete | Real TDX + nvtrust attestation module: auto-detects CC hardware, falls back to mock. Untested on real CC (needs Azure NCC / GCP A3-Confidential) |
-| **0.5d — Testnet** | ✅ Code-complete | Chain abstraction layer: `LocalChain` (JSON) and `BittensorChain` (real testnet/mainnet) backends. Set `AUTORALPH_CHAIN=bittensor` to switch. Weight setting, hotkey verification, subnet registration. |
+| **0.5d — Testnet** | ✅ Complete ([`v0.6.0`](https://github.com/AutoRalphAI/autoralph/releases/tag/v0.6.0)) | Bittensor testnet (netuid 16): two miners competed, validator set weights on-chain, king changed. Chain abstraction layer with rate-limit handling. |
 | **1.0 — Launch** | Planned | Register subnet, open to external miners, first bounty pilot |
 | **1.1 — SDK** | Planned | `pip install autoralph` on PyPI, CI/CD, changelog, semver |
 | **1.2 — Docs** | Planned | Documentation site, miner/validator quickstart guides, corpus query tutorials |
