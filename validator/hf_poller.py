@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-DEFAULT_REPO = "AutoRalphAI/proof-bundles"
+DEFAULT_REPO = "karpaai/proof-bundles"
 
 
 def _state_path(queue_dir: Path) -> Path:

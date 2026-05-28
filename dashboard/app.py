@@ -1,5 +1,5 @@
 """
-AutoRalph Live — minimal monitoring dashboard.
+Karpa Live — minimal monitoring dashboard.
 
 Reads from the local chain state + run outputs and displays:
   - Current king + king history
@@ -9,8 +9,8 @@ Reads from the local chain state + run outputs and displays:
   - Calibration reference timings
 
 Usage:
-    pip install 'autoralph[dashboard]'
-    streamlit run dashboard/app.py -- --autoralph-root /path/to/autoralph
+    pip install 'karpa[dashboard]'
+    streamlit run dashboard/app.py -- --karpa-root /path/to/karpa
 
 Phase 0.5: reads local JSON files. Phase 1+: reads from Bittensor chain +
 HuggingFace Hub.
@@ -29,31 +29,31 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-def load_events(autoralph_root: Path) -> list[dict]:
-    path = autoralph_root / "chain" / "events.jsonl"
+def load_events(karpa_root: Path) -> list[dict]:
+    path = karpa_root / "chain" / "events.jsonl"
     if not path.exists():
         return []
     return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
 
 
-def load_king(autoralph_root: Path) -> dict | None:
-    path = autoralph_root / "chain" / "king.json"
+def load_king(karpa_root: Path) -> dict | None:
+    path = karpa_root / "chain" / "king.json"
     if not path.exists():
         return None
     return json.loads(path.read_text())
 
 
-def load_noise_floor(autoralph_root: Path) -> dict | None:
+def load_noise_floor(karpa_root: Path) -> dict | None:
     for d in ["runs/h100_noise_floor", "runs/noise_floor"]:
-        path = autoralph_root / d / "noise_floor_summary.json"
+        path = karpa_root / d / "noise_floor_summary.json"
         if path.exists():
             return json.loads(path.read_text())
     return None
 
 
-def load_calibration(autoralph_root: Path) -> dict | None:
+def load_calibration(karpa_root: Path) -> dict | None:
     for d in ["runs/h100_calibration", "runs"]:
-        path = autoralph_root / d / "calibration.json"
+        path = karpa_root / d / "calibration.json"
         if path.exists():
             return json.loads(path.read_text())
     return None
@@ -68,8 +68,8 @@ def load_training_log(log_path: Path) -> pd.DataFrame | None:
     return pd.DataFrame(lines)
 
 
-def find_training_runs(autoralph_root: Path) -> list[tuple[str, Path]]:
-    runs_dir = autoralph_root / "runs"
+def find_training_runs(karpa_root: Path) -> list[tuple[str, Path]]:
+    runs_dir = karpa_root / "runs"
     if not runs_dir.exists():
         return []
     results = []
@@ -83,17 +83,17 @@ def find_training_runs(autoralph_root: Path) -> list[tuple[str, Path]]:
 
 
 def main():
-    st.set_page_config(page_title="AutoRalph Live", page_icon="⛰️", layout="wide")
-    st.title("⛰️ AutoRalph Live")
+    st.set_page_config(page_title="Karpa Live", page_icon="⛰️", layout="wide")
+    st.title("⛰️ Karpa Live")
     st.caption("Phase 0.5 monitoring dashboard — canonical baseline trajectory, submissions, and network health")
 
     # Auto-refresh selector (applied at the bottom of the page after all content renders).
     refresh = st.sidebar.selectbox("Auto-refresh", ["Off", "10s", "30s", "60s"], index=1)
 
-    autoralph_root = Path(sys.argv[-1]) if len(sys.argv) > 1 and Path(sys.argv[-1]).exists() else Path(".")
+    karpa_root = Path(sys.argv[-1]) if len(sys.argv) > 1 and Path(sys.argv[-1]).exists() else Path(".")
 
     # --- Current King ---
-    king = load_king(autoralph_root)
+    king = load_king(karpa_root)
     col1, col2, col3 = st.columns(3)
     if king:
         col1.metric("👑 Current King", king.get("miner_hotkey", "?")[:20])
@@ -109,7 +109,7 @@ def main():
 
     with left:
         st.subheader("📋 Submission Feed")
-        events = load_events(autoralph_root)
+        events = load_events(karpa_root)
         scored = [e for e in events if e.get("type") == "submission_scored"]
         if scored:
             rows = []
@@ -138,7 +138,7 @@ def main():
 
     with right:
         st.subheader("📊 Noise Floor")
-        nf = load_noise_floor(autoralph_root)
+        nf = load_noise_floor(karpa_root)
         if nf:
             st.metric("val_bpb mean", f"{nf['val_bpb']['mean']:.4f}")
             st.metric("val_bpb std (σ)", f"{nf['val_bpb']['std']:.4f}")
@@ -152,7 +152,7 @@ def main():
             st.caption("Run noise_floor.py first.")
 
         st.subheader("🖥️ Calibration")
-        cal = load_calibration(autoralph_root)
+        cal = load_calibration(karpa_root)
         if cal:
             st.metric("GPU", cal.get("gpu_name", "CPU"))
             st.metric("Matmul", f"{cal['matmul_ms']:.3f} ms")
@@ -164,7 +164,7 @@ def main():
     st.divider()
 
     # --- Live Training Progress ---
-    runs = find_training_runs(autoralph_root)
+    runs = find_training_runs(karpa_root)
     if runs:
         latest_name, latest_log = runs[-1]
         df_latest = load_training_log(latest_log)

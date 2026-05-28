@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-End-to-end miner script — runs on a remote H100 to participate in AutoRalph.
+End-to-end miner script — runs on a remote H100 to participate in Karpa.
 
 Flow:
   1. Hash the patch file (or empty patch for baseline)
@@ -37,7 +37,7 @@ from miner.submit import sign_submission
 from miner.hub import upload_bundle
 
 
-AUTORALPH_ROOT = Path(__file__).resolve().parent.parent
+KARPA_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _get_hotkey_ss58(wallet_name: str, hotkey_name: str) -> str:
@@ -63,7 +63,7 @@ def run_miner(
     miner_hotkey = _get_hotkey_ss58(wallet_name, hotkey_name)
 
     print(f"\n{'='*60}")
-    print(f"  AUTORALPH MINER — {label}")
+    print(f"  KARPA MINER — {label}")
     print(f"{'='*60}")
     print(f"  wallet: {wallet_name}/{hotkey_name}")
     print(f"  hotkey: {miner_hotkey}")
@@ -71,7 +71,7 @@ def run_miner(
     print(f"  tier:   {tier}")
     print(f"  hf:     {hf_repo}")
 
-    chain = get_chain(AUTORALPH_ROOT)
+    chain = get_chain(KARPA_ROOT)
     if not chain.is_hotkey_registered(miner_hotkey):
         raise RuntimeError(
             f"hotkey {miner_hotkey} is NOT registered on netuid "
@@ -79,8 +79,8 @@ def run_miner(
         )
 
     # ---- 1. Prepare submission directory -----------------------------------
-    sub_dir = AUTORALPH_ROOT / f"runs/miner/{label}_sub"
-    proof_dir = AUTORALPH_ROOT / f"runs/miner/{label}_proof"
+    sub_dir = KARPA_ROOT / f"runs/miner/{label}_sub"
+    proof_dir = KARPA_ROOT / f"runs/miner/{label}_proof"
     for d in [sub_dir, proof_dir]:
         if d.exists():
             shutil.rmtree(d)
@@ -112,7 +112,7 @@ def run_miner(
     print(f"\n[2/5] proof test — running canonical training...")
     t0 = time.time()
     bundle = run_proof_test(
-        autoralph_root=AUTORALPH_ROOT,
+        karpa_root=KARPA_ROOT,
         submission_dir=sub_dir,
         out_dir=proof_dir,
         tier=tier,
@@ -123,7 +123,7 @@ def run_miner(
 
     # ---- 4. Sign + assemble submission -------------------------------------
     print(f"\n[3/5] signing submission...")
-    sig = sign_submission(AUTORALPH_ROOT, miner_hotkey, bundle.bundle_hash, nonce)
+    sig = sign_submission(KARPA_ROOT, miner_hotkey, bundle.bundle_hash, nonce)
     submission = {
         "miner_hotkey": miner_hotkey,
         "handshake_nonce": nonce,
@@ -153,7 +153,7 @@ def run_miner(
     if url:
         print(f"  hf url:      {url}")
     print(f"\nValidators will now find this on HF Hub and score it.")
-    print(f"Track status: tail -f {AUTORALPH_ROOT}/chain*/events.jsonl  (on validator host)")
+    print(f"Track status: tail -f {KARPA_ROOT}/chain*/events.jsonl  (on validator host)")
 
     return {
         "miner_hotkey": miner_hotkey,
@@ -169,7 +169,7 @@ def run_miner(
 def main() -> None:
     import os
 
-    p = argparse.ArgumentParser(description="AutoRalph end-to-end miner")
+    p = argparse.ArgumentParser(description="Karpa end-to-end miner")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--patch", type=Path, help="Path to patch file to submit")
     g.add_argument("--baseline", action="store_true", help="Submit empty patch (baseline)")
@@ -178,7 +178,7 @@ def main() -> None:
                    help="Recipe config (default: proxy_cpu_smoke.json — use proxy_h100.json on H100)")
     p.add_argument("--tier", default="unverified", choices=["verified", "unverified"],
                    help="Attestation tier (verified requires CC; default: unverified)")
-    p.add_argument("--hf-repo", default=os.environ.get("AUTORALPH_HF_REPO", "AutoRalphAI/proof-bundles"),
+    p.add_argument("--hf-repo", default=os.environ.get("KARPA_HF_REPO", "karpaai/proof-bundles"),
                    help="HF dataset repo to upload to")
     p.add_argument("--hf-token", default=os.environ.get("HF_TOKEN"),
                    help="HF API token (defaults to $HF_TOKEN)")

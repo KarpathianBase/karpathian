@@ -1,7 +1,7 @@
 [project]
-name = "autoralph"
+name = "karpa-subnet"
 version = "0.1.0"
-description = "AutoRalph — Bittensor subnet for decentralized autonomous AI research"
+description = "Karpa — Bittensor subnet for decentralized autonomous AI research"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -39,7 +39,7 @@ dev = [
     "pytest>=7.4",
     "ruff>=0.4",
 ]
-all = ["autoralph[data,monitoring,dashboard,hub,chain,dev]"]
+all = ["karpa-subnet[data,monitoring,dashboard,hub,chain,dev]"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

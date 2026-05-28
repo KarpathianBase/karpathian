@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Continuous validator service — the 24/7 loop that makes AutoRalph a real subnet.
+Continuous validator service — the 24/7 loop that makes Karpa a real subnet.
 
 Each epoch (~tempo blocks):
   1. Sync metagraph
@@ -62,10 +62,10 @@ def log_err(msg: str) -> None:
     print(f"{_ts()} [ERROR] {msg}", flush=True)
 
 def log_debug(msg: str) -> None:
-    if os.environ.get("AUTORALPH_DEBUG"):
+    if os.environ.get("KARPA_DEBUG"):
         print(f"{_ts()} [DEBUG] {msg}", flush=True)
 
-AUTORALPH_ROOT = Path(__file__).resolve().parent.parent
+KARPA_ROOT = Path(__file__).resolve().parent.parent
 SHUTDOWN = False
 
 
@@ -105,7 +105,7 @@ def score_and_decide(
     noise_floor_margin: float,
 ) -> dict:
     """Score one submission against the current king. Returns a result dict."""
-    result = judge_submission(AUTORALPH_ROOT, bundle_dir)
+    result = judge_submission(KARPA_ROOT, bundle_dir)
 
     if result.rejected:
         return {
@@ -259,13 +259,13 @@ def run_epoch(
 
 
 def main():
-    p = argparse.ArgumentParser(description="AutoRalph continuous validator service")
-    p.add_argument("--queue-dir", type=Path, default=AUTORALPH_ROOT / "queue")
+    p = argparse.ArgumentParser(description="Karpa continuous validator service")
+    p.add_argument("--queue-dir", type=Path, default=KARPA_ROOT / "queue")
     p.add_argument("--epoch-seconds", type=int, default=120,
                    help="Seconds between epochs (default: 120, ~10 blocks)")
     p.add_argument("--noise-floor", type=float, default=0.013,
                    help="val_bpb margin for 'decisively beats king' (default: 0.013 from H100 calibration)")
-    p.add_argument("--hf-repo", default=os.environ.get("AUTORALPH_HF_REPO", DEFAULT_HF_REPO),
+    p.add_argument("--hf-repo", default=os.environ.get("KARPA_HF_REPO", DEFAULT_HF_REPO),
                    help=f"HuggingFace dataset repo to poll (default: {DEFAULT_HF_REPO}). Set to empty string to disable.")
     p.add_argument("--hf-token", default=os.environ.get("HF_TOKEN"),
                    help="HuggingFace API token (defaults to $HF_TOKEN)")
@@ -275,10 +275,10 @@ def main():
     args = p.parse_args()
 
     log_info("=" * 60)
-    log_info("  AutoRalph Validator Service")
+    log_info("  Karpa Validator Service")
     log_info("=" * 60)
 
-    chain = get_chain(AUTORALPH_ROOT)
+    chain = get_chain(KARPA_ROOT)
     args.queue_dir.mkdir(parents=True, exist_ok=True)
     (args.queue_dir / "pending").mkdir(exist_ok=True)
 

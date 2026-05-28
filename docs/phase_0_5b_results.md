@@ -2,7 +2,7 @@
 
 **Date:** May 27, 2026
 **Hardware:** NVIDIA H100 PCIe 80GB (Shadeform / ShadeCloud)
-**Code:** [`AutoRalphBase/autoralph`](https://github.com/AutoRalphBase/autoralph/tree/v0.5.1) @ [`v0.5.1`](https://github.com/AutoRalphBase/autoralph/releases/tag/v0.5.1)
+**Code:** [`karpaai/karpa`](https://github.com/karpaai/karpa/tree/v0.5.1) @ [`v0.5.1`](https://github.com/karpaai/karpa/releases/tag/v0.5.1)
 
 ---
 
@@ -28,8 +28,8 @@ One code change: `use_bf16=True` in `recipe/train.py`. PyTorch `torch.amp.autoca
 ## What this means for miners
 
 A proof-test that took 4.3 hours in fp32 now takes 69 minutes. At ~$3/hr for an H100, that's:
-- fp32: ~$13 per AutoRalph-1 proof test
-- bf16: ~$3.50 per AutoRalph-1 proof test
+- fp32: ~$13 per Karpa-1 proof test
+- bf16: ~$3.50 per Karpa-1 proof test
 
 Cheaper proof tests → lower barrier to submit → more patches competing → faster recipe improvement.
 
@@ -37,22 +37,22 @@ Cheaper proof tests → lower barrier to submit → more patches competing → f
 
 | Feature | What it does |
 |---|---|
-| **wandb live monitoring** | `--wandb` flag streams loss/lr/grad_norm/throughput to [wandb.ai/autoralph-ai/autoralph](https://wandb.ai/autoralph-ai/autoralph). Public — anyone can view. |
+| **wandb live monitoring** | `--wandb` flag streams loss/lr/grad_norm/throughput to [wandb.ai/karpaai/karpa](https://wandb.ai/karpaai/karpa). Public — anyone can view. |
 | **wandb metrics in proof bundles** | Training traces auto-exported as `wandb_metrics.json` alongside checkpoints. Miners submit their complete training story, not just the final number. |
-| **AutoRalph Live dashboard** | Streamlit dashboard with auto-refreshing loss curves, king status, noise floor stats. `streamlit run dashboard/app.py` |
+| **Karpa Live dashboard** | Streamlit dashboard with auto-refreshing loss curves, king status, noise floor stats. `streamlit run dashboard/app.py` |
 | **HuggingFace Hub integration** | `miner/hub.py` — upload/download proof bundles to HuggingFace. Checkpoints + logs + wandb traces + attestation, all content-addressed. |
 
 ## Live training run
 
-Watch the bf16 AutoRalph-1 training on wandb (public):
+Watch the bf16 Karpa-1 training on wandb (public):
 
-🔗 **wandb:** https://wandb.ai/autoralph-ai/autoralph
+🔗 **wandb:** https://wandb.ai/karpaai/karpa
 
 ## How to reproduce
 
 ```bash
-git clone https://github.com/AutoRalphBase/autoralph.git
-cd autoralph && git checkout v0.5.1
+git clone https://github.com/karpaai/karpa.git
+cd karpa && git checkout v0.5.1
 bash scripts/run_h100.sh  # bf16 is now the default
 ```
 
@@ -61,7 +61,7 @@ Or run just the training step with wandb:
 ```bash
 python -m recipe.train \
     --config configs/h100_default.json \
-    --out-dir runs/autoralph1_bf16 \
+    --out-dir runs/karpa1_bf16 \
     --seed 1337 \
     --wandb
 ```
@@ -74,7 +74,7 @@ python -m recipe.train \
 
 ---
 
-🔗 **Repo:** [github.com/AutoRalphBase/autoralph](https://github.com/AutoRalphBase/autoralph)
-🏷️ **This milestone:** [`v0.5.1`](https://github.com/AutoRalphBase/autoralph/releases/tag/v0.5.1)
-💬 **Discussions:** [github.com/orgs/AutoRalphBase/discussions](https://github.com/orgs/AutoRalphBase/discussions)
-📊 **wandb:** [wandb.ai/autoralph-ai/autoralph](https://wandb.ai/autoralph-ai/autoralph)
+🔗 **Repo:** [github.com/karpaai/karpa](https://github.com/karpaai/karpa)
+🏷️ **This milestone:** [`v0.5.1`](https://github.com/karpaai/karpa/releases/tag/v0.5.1)
+💬 **Discussions:** [github.com/orgs/karpaai/discussions](https://github.com/orgs/karpaai/discussions)
+📊 **wandb:** [wandb.ai/karpaai/karpa](https://wandb.ai/karpaai/karpa)

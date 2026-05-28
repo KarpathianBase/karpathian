@@ -1,3 +1,3 @@
-from .autoralph_base import AutoRalphBase, AutoRalphConfig
+from .karpa_base import KarpaBase, KarpaConfig
 
-__all__ = ["AutoRalphBase", "AutoRalphConfig"]
+__all__ = ["KarpaBase", "KarpaConfig"]

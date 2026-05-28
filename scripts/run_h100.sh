@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
 # ============================================================================
-# AutoRalph Phase 0.5 — H100 bootstrap script
+# Karpa Phase 0.5 — H100 bootstrap script
 #
 # Run this on a fresh H100 VM from Shadeform (Lambda, Latitude, etc.).
-# It does everything: clone → install → data prep → noise floor → AutoRalph-1.
+# It does everything: clone → install → data prep → noise floor → Karpa-1.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/AutoRalphBase/autoralph/main/scripts/run_h100.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/karpaai/karpa/main/scripts/run_h100.sh | bash
 #
 #   Or, if you've already cloned:
-#   cd autoralph && bash scripts/run_h100.sh
+#   cd karpa && bash scripts/run_h100.sh
 #
 # Expected wall-clock:
 #   Data prep (~1B tokens):  ~10-20 min
 #   Noise floor (10 seeds):  ~30 min  (proxy config, 500 steps each)
-#   AutoRalph-1 training:   ~35 min  (default config, 2000 steps)
+#   Karpa-1 training:   ~35 min  (default config, 2000 steps)
 #   Total:                   ~60-90 min
 #
 # Output:
 #   runs/h100_noise_floor/noise_floor_summary.json  — empirical noise floor
-#   runs/h100_autoralph1/                          — AutoRalph-1 checkpoint + logs
+#   runs/h100_karpa1/                          — Karpa-1 checkpoint + logs
 #   runs/h100_calibration/calibration.json          — H100 reference timings
 # ============================================================================
 
 set -euo pipefail
 
-REPO_URL="git@github-bitzic:AutoRalphBase/autoralph.git"
-WORKDIR="${AUTORALPH_DIR:-$HOME/autoralph}"
+REPO_URL="git@github-bitzic:karpaai/karpa.git"
+WORKDIR="${KARPA_DIR:-$HOME/karpa}"
 DATA_TOKENS="${DATA_TOKENS:-1000000000}"        # 1B training tokens
 EVAL_TOKENS="${EVAL_TOKENS:-5000000}"           # 5M eval tokens
 NOISE_RUNS="${NOISE_RUNS:-10}"
-AUTORALPH1_SEED="${AUTORALPH1_SEED:-1337}"
+KARPA1_SEED="${KARPA1_SEED:-1337}"
 # Two-tier model (whitepaper v1.1 §5.4):
 #   "verified"   = full TDX+nvtrust attestation chain (needs CC-capable H100)
 #   "unverified" = no attestation, scored at α=0.5 (any H100 works)
@@ -38,7 +38,7 @@ AUTORALPH1_SEED="${AUTORALPH1_SEED:-1337}"
 TIER="${TIER:-unverified}"
 
 echo "=============================================="
-echo "  AutoRalph Phase 0.5 — H100 Bootstrap"
+echo "  Karpa Phase 0.5 — H100 Bootstrap"
 echo "=============================================="
 
 # --- Step 0: Clone if needed ---
@@ -93,12 +93,12 @@ python scripts/noise_floor.py \
     --config configs/h100_proxy.json \
     --out-dir runs/h100_noise_floor
 
-# --- Step 5: AutoRalph-1 training ---
-echo "[5/5] Training AutoRalph-1 (300M params, ~262M tokens)..."
+# --- Step 5: Karpa-1 training ---
+echo "[5/5] Training Karpa-1 (300M params, ~262M tokens)..."
 python -m recipe.train \
     --config configs/h100_default.json \
-    --out-dir runs/h100_autoralph1 \
-    --seed "$AUTORALPH1_SEED"
+    --out-dir runs/h100_karpa1 \
+    --seed "$KARPA1_SEED"
 
 # --- Summary ---
 echo ""
@@ -108,7 +108,7 @@ echo "=============================================="
 echo ""
 echo "Calibration:   runs/h100_calibration/calibration.json"
 echo "Noise floor:   runs/h100_noise_floor/noise_floor_summary.json"
-echo "AutoRalph-1:  runs/h100_autoralph1/"
+echo "Karpa-1:  runs/h100_karpa1/"
 echo ""
 
 if [ -f "runs/h100_noise_floor/noise_floor_summary.json" ]; then
@@ -119,19 +119,19 @@ print(f\"Noise floor: mean={nf['val_bpb']['mean']:.4f}  std={nf['val_bpb']['std'
 "
 fi
 
-if [ -f "runs/h100_autoralph1/final_state.json" ]; then
+if [ -f "runs/h100_karpa1/final_state.json" ]; then
     python -c "
 import json
-fs = json.load(open('runs/h100_autoralph1/final_state.json'))
-print(f\"AutoRalph-1: final_loss={fs['final_loss']:.4f}  tokens={fs['tokens_seen']:,}  wall={fs['wall_clock_s']:.0f}s\")
+fs = json.load(open('runs/h100_karpa1/final_state.json'))
+print(f\"Karpa-1: final_loss={fs['final_loss']:.4f}  tokens={fs['tokens_seen']:,}  wall={fs['wall_clock_s']:.0f}s\")
 "
 fi
 
 echo ""
 echo "Next steps:"
-echo "  1. Run the hidden eval on AutoRalph-1:"
+echo "  1. Run the hidden eval on Karpa-1:"
 echo "     python -c \"..."
 echo "  2. Post results to GitHub Discussions"
 echo "  3. Build + test the Docker container:"
-echo "     docker build -t autoralph-proof:latest ."
+echo "     docker build -t karpa-proof:latest ."
 echo "  4. (Phase 0.5c) Rent a CC-capable H100 for real TDX+nvtrust attestation"

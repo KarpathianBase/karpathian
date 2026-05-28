@@ -46,7 +46,7 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# --- Karpathian: generated artifacts (never commit) ---
+# --- Karpa: generated artifacts (never commit) ---
 
 # Local "chain" state — Phase 0 stub for on-chain ledger. Per-environment.
 chain/

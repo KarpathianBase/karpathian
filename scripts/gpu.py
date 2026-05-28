@@ -37,7 +37,7 @@ KEY_FILE = Path("/root/.shadeform_api_key")
 INSTANCE_FILE = Path("/root/.shadeform_instance.json")
 SSH_KEY = Path("/root/.ssh/id_bitzic")
 SSH_KEY_ID = os.environ.get("SHADEFORM_SSH_KEY_ID", "")
-BACKUP_DIR = Path("/workspace/unicorn/karpathian/backup_h100")
+BACKUP_DIR = Path(__file__).resolve().parent.parent.parent / "backup_h100"
 
 
 def _api_key() -> str:
@@ -135,7 +135,7 @@ def cmd_rent(args):
         "region": region,
         "shade_instance_type": shade_type,
         "shade_cloud": True,
-        "name": f"autoralph-{int(time.time()) % 100000}",
+        "name": f"karpa-{int(time.time()) % 100000}",
     }
     if SSH_KEY_ID:
         body["ssh_key_id"] = SSH_KEY_ID
@@ -238,13 +238,13 @@ def cmd_backup(args):
     result = subprocess.run(
         ["ssh", "-i", str(SSH_KEY), "-p", str(port),
          f"{user}@{ip}",
-         "find /workspace/autoralph/runs -name 'final_state.json' -o -name 'training_log.jsonl' -o -name 'checkpoint.pt' -o -name 'data_manifest.json' 2>/dev/null | head -20"],
+         "find /workspace/karpa/runs -name 'final_state.json' -o -name 'training_log.jsonl' -o -name 'checkpoint.pt' -o -name 'data_manifest.json' 2>/dev/null | head -20"],
         capture_output=True, text=True, timeout=15,
     )
     remote_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
     print(f"Found {len(remote_files)} files to backup")
     for rf in remote_files:
-        local_name = rf.replace("/workspace/autoralph/", "").replace("/", "_")
+        local_name = rf.replace("/workspace/karpa/", "").replace("/", "_")
         local_path = BACKUP_DIR / local_name
         print(f"  {rf} → {local_path.name}")
         subprocess.run(scp_base + [f"{user}@{ip}:{rf}", str(local_path)], timeout=300)

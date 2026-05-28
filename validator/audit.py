@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from eval import run_hidden_eval
-from model import AutoRalphBase, AutoRalphConfig
+from model import KarpaBase, KarpaConfig
 from proof.runner import run_proof_test
 
 
@@ -76,7 +76,7 @@ def check_trajectory(
 
 
 def run_audit(
-    autoralph_root: Path,
+    karpa_root: Path,
     submission_dir: Path,
     miner_proof_dir: Path,
     audit_out_dir: Path,
@@ -95,7 +95,7 @@ def run_audit(
 
     # Re-run the proof test with the same submission.
     audit_bundle = run_proof_test(
-        autoralph_root=autoralph_root,
+        karpa_root=karpa_root,
         submission_dir=submission_dir,
         out_dir=audit_out_dir,
     )
@@ -103,18 +103,18 @@ def run_audit(
     # Hidden-eval on the audit checkpoint.
     ckpt = torch.load(audit_bundle.checkpoint_path, weights_only=False, map_location="cpu")
     saved = ckpt["config"]
-    cfg = AutoRalphConfig(
+    cfg = KarpaConfig(
         vocab_size=saved["vocab_size"], dim=saved["dim"],
         n_layers=saved["n_layers"], n_heads=saved["n_heads"],
         head_dim=saved["head_dim"], ffn_mult=saved["ffn_mult"],
         max_seq_len=saved["max_seq_len"],
     )
-    model = AutoRalphBase(cfg)
+    model = KarpaBase(cfg)
     model.load_state_dict(ckpt["model"])
     if torch.cuda.is_available():
         model = model.cuda()
     eval_result = run_hidden_eval(
-        model, autoralph_root / "eval" / "private",
+        model, karpa_root / "eval" / "private",
         seq_len=cfg.max_seq_len // 2,
     )
 
@@ -123,12 +123,12 @@ def run_audit(
         miner_proof / "training" / "checkpoint.pt",
         weights_only=False, map_location="cpu",
     )
-    miner_model = AutoRalphBase(cfg)
+    miner_model = KarpaBase(cfg)
     miner_model.load_state_dict(miner_ckpt["model"])
     if torch.cuda.is_available():
         miner_model = miner_model.cuda()
     miner_eval = run_hidden_eval(
-        miner_model, autoralph_root / "eval" / "private",
+        miner_model, karpa_root / "eval" / "private",
         seq_len=cfg.max_seq_len // 2,
     )
 
@@ -179,7 +179,7 @@ def main() -> None:
     import argparse
 
     p = argparse.ArgumentParser()
-    p.add_argument("--autoralph-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    p.add_argument("--karpa-root", type=Path, default=Path(__file__).resolve().parent.parent)
     p.add_argument("--submission-dir", type=Path, required=True)
     p.add_argument("--miner-proof-dir", type=Path, required=True)
     p.add_argument("--audit-out-dir", type=Path, required=True)
@@ -187,7 +187,7 @@ def main() -> None:
     args = p.parse_args()
 
     result = run_audit(
-        autoralph_root=args.autoralph_root,
+        karpa_root=args.karpa_root,
         submission_dir=args.submission_dir,
         miner_proof_dir=args.miner_proof_dir,
         audit_out_dir=args.audit_out_dir,

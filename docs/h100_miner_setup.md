@@ -1,6 +1,6 @@
 # H100 miner setup
 
-How to launch an AutoRalph miner on a rented H100 (Shadeform / Hyperstack / any cloud) and submit proof bundles to validators via HuggingFace Hub.
+How to launch a Karpa miner on a rented H100 (Shadeform / Hyperstack / any cloud) and submit proof bundles to validators via HuggingFace Hub.
 
 ## What you need on the box
 
@@ -25,8 +25,8 @@ Inside the rented box:
 
 ```bash
 # Clone the repo (private — use a deploy key or PAT)
-git clone git@github.com:KarpathianBase/autoralph.git
-cd autoralph
+git clone git@github.com:karpaai/karpa.git
+cd karpa
 
 # venv + deps
 python -m venv .venv
@@ -54,7 +54,7 @@ Copy your already-registered miner hotkey to the box (the simplest path is `rsyn
 
 ```bash
 cat > .env <<'EOF'
-AUTORALPH_CHAIN=bittensor
+KARPA_CHAIN=bittensor
 BT_NETWORK=test
 BT_NETUID=16
 BT_WALLET=<your-miner-wallet>
@@ -62,7 +62,7 @@ BT_HOTKEY=default
 BT_WALLET_PASSWORD=<password>
 
 HF_TOKEN=<hf-write-token>
-AUTORALPH_HF_REPO=AutoRalphAI/proof-bundles
+KARPA_HF_REPO=karpaai/proof-bundles
 EOF
 ```
 
@@ -114,7 +114,7 @@ What happens under the hood (printed in the run log):
 2. Commit `(hotkey, patch_hash, nonce)` on Bittensor
 3. Run canonical training (proxy_h100.json: ~30 min on a single H100)
 4. Sign the bundle with the miner hotkey
-5. Upload bundle to `AutoRalphAI/proof-bundles/submissions/<bundle_hash[:16]>/`
+5. Upload bundle to `karpaai/proof-bundles/submissions/<bundle_hash[:16]>/`
 
 After upload, validators worldwide will discover the bundle on their next HF poll (~60s) and score it. Track progress from any validator host with:
 
