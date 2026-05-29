@@ -36,6 +36,8 @@ def upload_bundle(
     proof_dir: Path,
     repo_id: str = "karpaai/proof-bundles",
     token: str | None = None,
+    rationale_text: str = "",
+    patch_path: Path | None = None,
 ) -> str:
     """Upload a proof bundle as a single HF PR. Returns the PR URL.
 
@@ -43,10 +45,23 @@ def upload_bundle(
     forbidden. Instead we stage all the bundle files into one folder and
     push them via `create_pr=True` — community PR pattern. The validator
     side polls open PRs, scores, and the bot merges the winner.
+
+    When `rationale_text` is supplied, it becomes the PR description (so a
+    human reading the HF PR sees the hypothesis before the file list) and
+    also gets included as `rationale.md` in the bundle.
+
+    The HF storage prefix uses the full 64-char `bundle_hash` (not a
+    16-char slice) to eliminate the silent collision risk between honest
+    miners who submit identical baseline bundles — both the storage path
+    and the validator's poll-state key off this prefix.
+
+    If `patch_path` is supplied (or a `patch.diff` already exists at the
+    bundle root of `proof_dir`), it is uploaded as `patch.diff` so the
+    validator's PR-match verifier can cross-check the GitHub PR diff
+    against the bundle's diff (without it the verifier silently skips
+    the check and treats the bundle as a baseline).
     """
     from huggingface_hub import HfApi, CommitOperationAdd
-    import tempfile
-    import shutil
 
     api = HfApi(token=token)
 
@@ -58,7 +73,7 @@ def upload_bundle(
     proof_dir = Path(proof_dir)
     manifest = json.loads((proof_dir / "bundle_manifest.json").read_text())
     bundle_hash = manifest["bundle_hash"]
-    prefix = f"submissions/{bundle_hash[:16]}"
+    prefix = f"submissions/{bundle_hash}"
 
     # Collect (local_path, name_in_bundle) pairs.
     files: list[tuple[Path, str]] = [
@@ -72,10 +87,18 @@ def upload_bundle(
             p = training_dir / name
             if p.exists():
                 files.append((p, name))
-    for name in ["attestation.json", "submission.json"]:
+    for name in ["attestation.json", "submission.json", "rationale.md", "patch.diff"]:
         p = proof_dir / name
         if p.exists():
             files.append((p, name))
+
+    # Explicit patch_path overrides / supplements an in-tree patch.diff.
+    if patch_path is not None:
+        patch_path = Path(patch_path)
+        if patch_path.exists():
+            # Drop any auto-picked patch.diff in favor of the explicit one.
+            files = [(lp, rn) for (lp, rn) in files if rn != "patch.diff"]
+            files.append((patch_path, "patch.diff"))
 
     operations = [
         CommitOperationAdd(path_in_repo=f"{prefix}/{remote_name}", path_or_fileobj=str(local_path))
@@ -85,12 +108,34 @@ def upload_bundle(
     total_mb = sum(p.stat().st_size for (p, _) in files if p.exists()) / 1e6
     print(f"[hub] uploading {len(operations)} files ({total_mb:.1f} MB) as PR → {repo_id}/{prefix}")
 
+    # PR description: rationale upfront, then bundle identification.
+    # Cap rationale to ~60 KB so we don't trip the HF commit-description limit.
+    _RATIONALE_MAX_BYTES = 60_000
+    description_parts = []
+    if rationale_text.strip():
+        rationale_clean = rationale_text.rstrip()
+        # Strip a trailing markdown `---` sign-off so we don't render two
+        # consecutive horizontal rules when we append our own separator.
+        while rationale_clean.endswith("---"):
+            rationale_clean = rationale_clean[:-3].rstrip()
+        rationale_bytes = rationale_clean.encode("utf-8")
+        if len(rationale_bytes) > _RATIONALE_MAX_BYTES:
+            rationale_clean = rationale_bytes[:_RATIONALE_MAX_BYTES].decode("utf-8", errors="ignore")
+            rationale_clean += "\n\n_…rationale truncated; full text in bundle's rationale.md…_"
+        description_parts.append(rationale_clean)
+        description_parts.append("---")
+    description_parts.append(
+        f"**bundle_hash:** `{bundle_hash}`  \n"
+        f"**manifest sha256:** `{manifest.get('manifest_sha256', '?')}`"
+    )
+    commit_description = "\n\n".join(description_parts)
+
     commit_info = api.create_commit(
         repo_id=repo_id,
         repo_type="dataset",
         operations=operations,
         commit_message=f"Submit proof bundle {bundle_hash[:12]}",
-        commit_description=f"Bundle hash: `{bundle_hash}`\nManifest sha256: `{manifest.get('manifest_sha256', '?')}`",
+        commit_description=commit_description,
         create_pr=True,
     )
 
@@ -108,7 +153,7 @@ def download_bundle(
     """Download a proof bundle from HuggingFace Hub. Returns local path."""
     from huggingface_hub import hf_hub_download, list_repo_tree
 
-    prefix = f"submissions/{bundle_hash[:16]}"
+    prefix = f"submissions/{bundle_hash}"
     if out_dir is None:
         out_dir = Path(f"/tmp/karpa_bundles/{bundle_hash[:16]}")
     out_dir.mkdir(parents=True, exist_ok=True)

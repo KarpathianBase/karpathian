@@ -25,6 +25,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import stat
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,46 @@ def _get_hotkey_ss58(wallet_name: str, hotkey_name: str) -> str:
     return w.hotkey.ss58_address
 
 
+def _summarise_rationale(rationale_text: str, max_chars: int = 280) -> str:
+    """Pull a short summary out of a rationale markdown file.
+    Preference: the **Summary:** bold line if present; otherwise the first
+    non-heading paragraph; otherwise the first non-empty line.
+    Trimmed/ellipsed to max_chars.
+    """
+    if not rationale_text.strip():
+        return ""
+    import re as _re
+    # Single-line capture anchored at start of a line — stops at end of line so
+    # a missing trailing \n\n doesn't slurp the rest of the file.
+    m = _re.search(r"^\s*\*\*Summary:\*\*\s*(.+)$", rationale_text, _re.MULTILINE)
+    if m:
+        snippet = m.group(1).strip()
+    else:
+        paragraphs = [p.strip() for p in rationale_text.split("\n\n")]
+        # For each paragraph, strip any leading heading lines (starting with "#")
+        # so a paragraph that bundles "# Heading\nBody" still yields its body.
+        normalised = []
+        for p in paragraphs:
+            lines = p.split("\n")
+            while lines and lines[0].lstrip().startswith("#"):
+                lines.pop(0)
+            cleaned = "\n".join(lines).strip()
+            normalised.append(cleaned)
+        body = [p for p in normalised if p]
+        if body:
+            snippet = body[0]
+        elif paragraphs:
+            # Heading-only fallback: strip leading "#" and whitespace so the
+            # literal marker doesn't leak into the summary.
+            snippet = paragraphs[0].lstrip("#").strip()
+        else:
+            snippet = ""
+    snippet = " ".join(snippet.split())  # collapse whitespace + newlines
+    if len(snippet) > max_chars:
+        snippet = snippet[: max_chars - 1].rstrip() + "…"
+    return snippet
+
+
 def run_miner(
     patch_path: Path | None,
     label: str,
@@ -57,6 +98,7 @@ def run_miner(
     hf_token: str | None,
     seed: int,
     skip_upload: bool,
+    rationale_path: Path | None = None,
 ) -> dict:
     import os
 
@@ -101,8 +143,45 @@ def run_miner(
     patch_hash = hashlib.sha256(patch_text.encode()).hexdigest()
     print(f"  patch_hash: {patch_hash[:24]}...  ({len(patch_text)} bytes)")
 
+    # Read the rationale upfront so we can fail fast if the file's missing
+    # AND so we can embed it into the proof bundle before run_proof_test()
+    # snapshots the bundle_manifest.
+    rationale_text = ""
+    rationale_summary = ""
+    if rationale_path is not None:
+        # Hardened loader: resolve strict (raises if missing), reject symlinks
+        # and non-regular files, cap size before reading, decode strict-utf8.
+        try:
+            resolved = rationale_path.resolve(strict=True)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"--rationale path does not exist: {rationale_path}")
+        if rationale_path.is_symlink() or resolved.is_symlink():
+            raise ValueError(f"--rationale path must not be a symlink: {rationale_path}")
+        if not resolved.is_file():
+            raise ValueError(f"--rationale path must be a regular file: {rationale_path}")
+        st = resolved.stat()
+        if stat.S_IFMT(st.st_mode) != stat.S_IFREG:
+            raise ValueError(f"--rationale path must be a regular file: {rationale_path}")
+        _RATIONALE_MAX_BYTES = 65536
+        if st.st_size > _RATIONALE_MAX_BYTES:
+            raise ValueError(
+                f"--rationale file too large: {st.st_size} bytes "
+                f"(max {_RATIONALE_MAX_BYTES}): {rationale_path}"
+            )
+        if resolved.suffix.lower() not in {".md", ".txt"}:
+            print(f"  WARNING: --rationale extension is '{resolved.suffix}' "
+                  f"(expected .md or .txt); reading anyway.")
+        try:
+            rationale_text = resolved.read_text(encoding="utf-8", errors="strict")
+        except UnicodeDecodeError as e:
+            raise ValueError(
+                f"--rationale file is not valid UTF-8 ({e}): {rationale_path}"
+            ) from e
+        rationale_summary = _summarise_rationale(rationale_text)
+        print(f"  rationale: {rationale_summary[:80]}{'…' if len(rationale_summary) > 80 else ''}")
+
     # ---- 2. Handshake — commit on-chain ------------------------------------
-    print(f"\n[1/5] handshake — committing (hotkey, patch_hash, nonce) on-chain...")
+    print(f"\n[1/6] handshake — committing (hotkey, patch_hash, nonce) on-chain...")
     nonce = chain.request_handshake_nonce(miner_hotkey, patch_hash)
     print(f"      nonce: {nonce[:32]}...")
 
@@ -114,7 +193,7 @@ def run_miner(
     }, indent=2))
 
     # ---- 3. Run the proof test ---------------------------------------------
-    print(f"\n[2/5] proof test — running canonical training...")
+    print(f"\n[2/6] proof test — running canonical training...")
     t0 = time.time()
     bundle = run_proof_test(
         karpa_root=KARPA_ROOT,
@@ -125,6 +204,14 @@ def run_miner(
     elapsed = time.time() - t0
     print(f"      bundle_hash: {bundle.bundle_hash[:24]}...")
     print(f"      elapsed:     {elapsed:.1f}s")
+
+    # Write rationale.md into proof_dir so HF upload picks it up. This is the
+    # only on-disk copy that actually ships — the bundle manifest already
+    # hashes its inputs; rationale.md is an additional human-facing artifact
+    # that travels with the bundle. Always write when a rationale was provided
+    # (even if empty) so behaviour matches the submission.json hypothesis field.
+    if rationale_path is not None:
+        (proof_dir / "rationale.md").write_text(rationale_text)
 
     # ---- 4. Sign submission ------------------------------------------------
     print(f"\n[3/6] signing submission...")
@@ -157,6 +244,7 @@ def run_miner(
                 fork_url=fork_url,
                 token=gh_token,
                 upstream=upstream,
+                rationale_text=rationale_text,
             )
             print(f"      recipe PR: {pr_url}")
         except Exception as e:
@@ -175,6 +263,7 @@ def run_miner(
         "label": label,
         "pr_url": pr_url,
         "hf_bundle_url": "",  # filled by validator/log only; the PR itself IS the bundle on HF
+        "hypothesis": rationale_summary,  # short machine-readable, full markdown in rationale.md
     }
     (proof_dir / "submission.json").write_text(json.dumps(submission, indent=2, sort_keys=True))
 
@@ -184,7 +273,17 @@ def run_miner(
         url = None
     else:
         print(f"\n[5/6] uploading bundle to HF Hub {hf_repo} as PR...")
-        url = upload_bundle(proof_dir, repo_id=hf_repo, token=hf_token)
+        # patch.diff lives in sub_dir (the submission staging area). Pass it
+        # explicitly so the bundle on HF carries it — the validator's
+        # PR-match verifier reads bundle_dir/patch.diff to byte-equal the
+        # GitHub PR's diff; without it the check silently no-ops.
+        url = upload_bundle(
+            proof_dir,
+            repo_id=hf_repo,
+            token=hf_token,
+            rationale_text=rationale_text,
+            patch_path=target_patch if patch_text.strip() else None,
+        )
 
     # ---- 7. Done -----------------------------------------------------------
     print(f"\n[6/6] DONE")
@@ -226,6 +325,10 @@ def main() -> None:
     p.add_argument("--hf-token", default=os.environ.get("HF_TOKEN"),
                    help="HF API token (defaults to $HF_TOKEN)")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--rationale", type=Path, default=None,
+                   help="Markdown file with the hypothesis / reasoning behind this patch. "
+                        "Travels with the bundle, becomes the GH PR body and the HF PR description, "
+                        "and seeds submission.json's hypothesis field.")
     p.add_argument("--skip-upload", action="store_true",
                    help="Run locally but skip HF upload (for testing)")
     args = p.parse_args()
@@ -239,6 +342,7 @@ def main() -> None:
         hf_token=args.hf_token,
         seed=args.seed,
         skip_upload=args.skip_upload,
+        rationale_path=args.rationale,
     )
     print(f"\n{json.dumps(result, indent=2)}")
 

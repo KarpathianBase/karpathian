@@ -47,11 +47,44 @@ def _gh_request(method: str, path: str, token: str, body: dict | None = None) ->
         raise RuntimeError(f"github {method} {path} → {e.code}: {detail}") from None
 
 
-def _run(cmd: list[str], cwd: Path) -> str:
+def _redact(text: str, secrets: tuple[str, ...] = ()) -> str:
+    """Scrub Authorization headers and any explicit secret strings from text.
+
+    Used to keep PATs out of exception messages that the broader script may
+    forward to logs / bittensor metrics on push failure.
+    """
+    if not text:
+        return text
+    out = text
+    # Redact `Authorization: bearer <token>` regardless of casing / quoting.
+    import re
+    out = re.sub(
+        r"(?i)(authorization\s*[:=]\s*['\"]?\s*bearer\s+)\S+",
+        r"\1<redacted>",
+        out,
+    )
+    # Redact `http.extraheader=...bearer <token>...` style git -c values.
+    out = re.sub(
+        r"(?i)(http\.extraheader\s*=\s*authorization\s*:\s*bearer\s+)\S+",
+        r"\1<redacted>",
+        out,
+    )
+    # Redact any token-in-URL form `https://<token>@host` defensively.
+    out = re.sub(r"(https?://)[^/@\s]+@", r"\1<redacted>@", out)
+    for s in secrets:
+        if s:
+            out = out.replace(s, "<redacted>")
+    return out
+
+
+def _run(cmd: list[str], cwd: Path, secrets: tuple[str, ...] = ()) -> str:
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if r.returncode != 0:
+        safe_cmd = _redact(" ".join(cmd), secrets)
+        safe_stdout = _redact(r.stdout, secrets)
+        safe_stderr = _redact(r.stderr, secrets)
         raise RuntimeError(
-            f"git command failed: {' '.join(cmd)}\nstdout: {r.stdout}\nstderr: {r.stderr}"
+            f"git command failed: {safe_cmd}\nstdout: {safe_stdout}\nstderr: {safe_stderr}"
         )
     return r.stdout
 
@@ -66,6 +99,7 @@ def open_recipe_pr(
     fork_url: str,
     token: str,
     upstream: str = "karpaai/recipe",
+    rationale_text: str = "",
 ) -> str:
     """Push a branch with the patch applied to the miner's fork, then open
     a PR upstream. Returns the PR URL.
@@ -73,6 +107,9 @@ def open_recipe_pr(
     The branch name is deterministic: `submit/<bundle_hash[:12]>` so the
     same submission cannot accidentally collide with another, and so the
     validator can resolve the PR by bundle_hash alone if it has to.
+
+    When `rationale_text` is provided, it goes above the bundle metadata so
+    the human reviewer reads the hypothesis before the proof identifiers.
     """
     if not token:
         raise RuntimeError("KARPA_MINER_GH_TOKEN is not set — cannot open PR")
@@ -83,7 +120,8 @@ def open_recipe_pr(
     short_hash = bundle_hash[:12]
     branch = f"submit/{short_hash}"
     title = f"[submit] {short_hash} — val by hotkey {miner_hotkey[:12]}…"
-    body = "\n".join(
+
+    bundle_block = "\n".join(
         line
         for line in (
             f"**bundle_hash:** `{bundle_hash}`",
@@ -97,6 +135,25 @@ def open_recipe_pr(
         )
         if line is not None
     )
+
+    if rationale_text.strip():
+        body = rationale_text.rstrip() + "\n\n---\n\n## Submission identifiers\n\n" + bundle_block
+    else:
+        body = bundle_block
+
+    # GitHub rejects PR bodies > 65,536 chars with 422 *after* we push. Cap
+    # well under the limit (leaving room for the truncation marker itself).
+    # Apply the same cap to the commit message body so the squashed merge
+    # commit doesn't carry a 60KB blob either.
+    _BODY_CAP = 60_000
+    _TRUNC_MARK = "\n\n_…rationale truncated for GitHub's 65KB body limit…_"
+    if len(body) > _BODY_CAP:
+        keep = _BODY_CAP - len(_TRUNC_MARK)
+        body = body[:keep] + _TRUNC_MARK
+    commit_body = body
+    if len(commit_body) > _BODY_CAP:
+        keep = _BODY_CAP - len(_TRUNC_MARK)
+        commit_body = commit_body[:keep] + _TRUNC_MARK
 
     workdir = Path(tempfile.mkdtemp(prefix="karpa_pr_"))
     try:
@@ -124,18 +181,34 @@ def open_recipe_pr(
                 "-c", f"user.email={miner_github or 'miner'}@karpa.local",
                 "commit",
                 "-m", title,
-                "-m", body,
+                "-m", commit_body,
             ],
             cwd=workdir,
         )
 
-        # 5. Push to the miner's fork using token auth
-        # Inject token into URL: https://<token>@github.com/<user>/recipe.git
-        from urllib.parse import urlparse, urlunparse
+        # 5. Push to the miner's fork.
+        #
+        # Auth: pass the PAT through `git -c http.extraheader=...` so the
+        # token never appears in argv (ps aux). The plain fork_url is the
+        # only URL on the command line. We DO NOT use --force-with-lease
+        # here: after a shallow clone there is no remote-tracking ref for
+        # `submit/<hash>`, so lease checks reject the second push of the
+        # same bundle. The branch name is fully namespaced by bundle_hash
+        # and lives on the miner's own fork, so an unconditional force is
+        # safe and idempotent.
+        from urllib.parse import urlparse
         parsed = urlparse(fork_url)
-        netloc = f"{token}@{parsed.netloc}" if parsed.username is None else parsed.netloc
-        push_url = urlunparse(parsed._replace(netloc=netloc))
-        _run(["git", "push", "--force-with-lease", push_url, branch], cwd=workdir)
+        # Strip any embedded creds defensively before using the URL on argv.
+        plain_netloc = parsed.hostname or parsed.netloc
+        if parsed.port:
+            plain_netloc = f"{plain_netloc}:{parsed.port}"
+        plain_url = parsed._replace(netloc=plain_netloc).geturl()
+        extraheader = f"http.extraheader=Authorization: bearer {token}"
+        _run(
+            ["git", "-c", extraheader, "push", "--force", plain_url, branch],
+            cwd=workdir,
+            secrets=(token,),
+        )
 
         # 6. Open PR via REST API
         head_owner = parsed.path.lstrip("/").split("/")[0]

@@ -286,7 +286,62 @@ def run_epoch(
             # — the on-chain crown already happened.
             bot_token = os.environ.get("KARPA_BOT_GH_TOKEN", "")
             pr_url = result.get("pr_url", "")
+            # Read .hf_pr.json once up front so we can use the actual bundle
+            # repo_id for the release-notes link (not just whatever the
+            # validator's KARPA_HF_REPO env var happens to say). Falls back to
+            # the env var if the bundle didn't ship via an HF PR.
+            hf_pr_info: dict | None = None
+            hf_pr_path = bundle_dir / ".hf_pr.json"
+            if hf_pr_path.exists():
+                try:
+                    import json as _json
+                    hf_pr_info = _json.loads(
+                        hf_pr_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+                    log_warn(f"failed to read .hf_pr.json for {bundle_id}: {e}")
+            hf_bundle_repo = (
+                (hf_pr_info or {}).get("repo_id")
+                or os.environ.get("KARPA_HF_REPO", "karpaai/proof-bundles")
+            )
             if bot_token and pr_url:
+                # Pull the hypothesis (short) from submission.json and the full
+                # rationale.md (if present) so the release notes can lead with
+                # the miner's reasoning.
+                #
+                # NOTE: `hypothesis` is currently NOT covered by the miner's
+                # signature on submission.json (followup: fold it into the
+                # signed payload). For now we treat it as informational; the
+                # rendering side (validator/github_bot.py) prefixes it with
+                # "_Miner's claim..._" so readers know it's unverified.
+                hypothesis = ""
+                rationale_md = ""
+                sub_path = bundle_dir / "submission.json"
+                try:
+                    import json as _json
+                    sub = _json.loads(sub_path.read_text(encoding="utf-8", errors="replace"))
+                    hypothesis = sub.get("hypothesis", "")
+                except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+                    log_warn(f"failed to load submission.json for {bundle_id}: {e}")
+                rm = bundle_dir / "rationale.md"
+                if rm.exists():
+                    try:
+                        # Defense-in-depth size cap: miner-side caps rationale
+                        # at 64KB; we allow some slack (200KB) but anything
+                        # larger is treated as adversarial and dropped.
+                        if rm.stat().st_size > 200_000:
+                            log_warn(
+                                f"rationale.md for {bundle_id} too large "
+                                f"({rm.stat().st_size} bytes) — skipping"
+                            )
+                        else:
+                            rationale_md = rm.read_text(encoding="utf-8", errors="replace")
+                    except (FileNotFoundError, UnicodeDecodeError, OSError) as e:
+                        log_warn(f"failed to load rationale.md for {bundle_id}: {e}")
+                # Clamp the rationale we hand off to merge_and_release to 30KB
+                # to keep release notes manageable even if it slipped past
+                # earlier caps.
+                rationale_summary = rationale_md[:30_000] if rationale_md else ""
                 try:
                     from validator.github_bot import merge_and_release
                     rel = merge_and_release(
@@ -299,8 +354,10 @@ def run_epoch(
                             "miner_hotkey": miner_hotkey,
                             "miner_github": result.get("miner_github", ""),
                             "bundle_hash": result["bundle_hash"],
+                            "hypothesis": hypothesis,
+                            "rationale_md": rationale_summary,
                             "hf_bundle_url": (
-                                f"https://huggingface.co/datasets/{os.environ.get('KARPA_HF_REPO', 'karpaai/proof-bundles')}"
+                                f"https://huggingface.co/datasets/{hf_bundle_repo}"
                                 f"/tree/main/submissions/{result['bundle_hash'][:16]}"
                             ),
                         },
@@ -322,10 +379,9 @@ def run_epoch(
                 log_warn(f"king changed with PR {pr_url} but KARPA_BOT_GH_TOKEN unset — manual merge needed")
 
             # Merge the corresponding HF PR (if the bundle came from one).
-            hf_pr_path = bundle_dir / ".hf_pr.json"
-            if hf_pr_path.exists():
-                import json as _json
-                hf_pr = _json.loads(hf_pr_path.read_text())
+            # Reuse hf_pr_info read at the top of the king-change block.
+            if hf_pr_info is not None:
+                hf_pr = hf_pr_info
                 hf_token = os.environ.get("KARPA_BOT_HF_TOKEN") or os.environ.get("HF_TOKEN", "")
                 if hf_token:
                     from validator.hf_bot import merge_pr as hf_merge_pr
