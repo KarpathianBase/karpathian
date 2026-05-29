@@ -130,12 +130,28 @@ def verify_pr_matches_bundle(
     # normalized whitespace-stripped diffs, because GitHub may add metadata
     # lines (index, mode bits) that aren't in the bundle's patch.
     def _normalize(d: str) -> bytes:
-        # Drop git metadata lines that the bundle patch doesn't carry.
+        # Drop git metadata lines that the bundle patch (produced by
+        # `git diff` without the porcelain prefix, or by hand) doesn't carry.
+        # The GitHub-fetched diff always has `diff --git a/x b/x` headers and
+        # `index <oid>..<oid> <mode>` lines; the bundle's patch.diff usually
+        # has only the `--- a/x` / `+++ b/x` / `@@ ... @@` hunks.
         kept = []
         for line in d.splitlines():
-            if line.startswith(("index ", "new file mode ", "deleted file mode ", "old mode ", "new mode ")):
+            if line.startswith((
+                "diff --git ",
+                "index ",
+                "new file mode ", "deleted file mode ",
+                "old mode ", "new mode ",
+                "similarity index ", "rename from ", "rename to ",
+                "copy from ", "copy to ",
+            )):
                 continue
+            # Also collapse any trailing whitespace per-line so the SHAs aren't
+            # CRLF-sensitive between GitHub's serving and disk storage.
             kept.append(line.rstrip())
+        # Strip a single trailing blank line so an extra "\n" doesn't break parity.
+        while kept and kept[-1] == "":
+            kept.pop()
         return ("\n".join(kept) + "\n").encode()
 
     pr_sha = hashlib.sha256(_normalize(pr_diff)).hexdigest()
