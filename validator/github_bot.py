@@ -156,9 +156,10 @@ def verify_pr_matches_bundle(
         for line in d.splitlines():
             if line.startswith(SKIP_PREFIXES):
                 continue
-            # Drop context lines (start with a single space). Keep `---`,
-            # `+++`, `-`, `+`, blank lines.
-            if line.startswith(" "):
+            # Drop context lines (start with a single space) and bare
+            # blank lines (inter-hunk separators in some patch formats).
+            # Keep `---`, `+++`, `-`, `+`.
+            if line == "" or line.startswith(" "):
                 continue
             kept.append(line.rstrip())
         while kept and kept[-1] == "":
